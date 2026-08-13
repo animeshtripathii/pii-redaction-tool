@@ -109,7 +109,7 @@ function proc(txt, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap) {
   return txt;
 }
 
-// ultra-fast memory-efficient docx buffer redaction
+// paragraph-level fast memory-efficient docx buffer redaction
 async function redactBuf(rawBuf) {
   const pMap = new MapCls(() => faker.person.fullName());
   const cMap = new MapCls(() => `${faker.company.name()} Limited`);
@@ -127,10 +127,30 @@ async function redactBuf(rawBuf) {
 
   for (const f of targetFiles) {
     let xmlStr = await zip.file(f).async('string');
-    xmlStr = xmlStr.replace(/(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/gi, (match, openTag, textContent, closeTag) => {
-      const red = proc(textContent, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap);
-      return openTag + red + closeTag;
+
+    xmlStr = xmlStr.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/gi, pMatch => {
+      let paraText = '';
+      pMatch.replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi, (tMatch, content) => {
+        paraText += content + ' ';
+        return tMatch;
+      });
+
+      if (!paraText.trim()) return pMatch;
+
+      const norm = paraText.replace(/[\t\r\n]+/g, ' ').trim();
+      const red = proc(norm, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap);
+
+      if (red.toLowerCase() !== norm.toLowerCase()) {
+        const pPrMatch = pMatch.match(/<w:pPr\b[^>]*>[\s\S]*?<\/w:pPr>/i);
+        const pPrXml = pPrMatch ? pPrMatch[0] : '';
+
+        const safeRed = red.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return `<w:p>${pPrXml}<w:r><w:t xml:space="preserve">${safeRed}</w:t></w:r></w:p>`;
+      }
+
+      return pMatch;
     });
+
     zip.file(f, xmlStr);
   }
 
@@ -164,7 +184,6 @@ const swaggerSpec = {
     '/api/redact': {
       post: {
         summary: 'Upload DOCX file and download redacted output file',
-        produces: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         requestBody: {
           content: {
             'multipart/form-data': {
@@ -182,7 +201,7 @@ const swaggerSpec = {
           200: {
             description: 'Redacted DOCX output file download',
             content: {
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+              'application/octet-stream': {
                 schema: { type: 'string', format: 'binary' }
               }
             },
