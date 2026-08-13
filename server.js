@@ -10,7 +10,18 @@ const { calcMetrics } = require('./evaluate');
 
 const app = express();
 const port = process.env.PORT || 3000;
-const upload = multer({ dest: 'uploads/' });
+
+// use in-memory storage for uploaded files (zero disk I/O, works everywhere: Render, Vercel, AWS)
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+// enable CORS for cross-origin Swagger UI requests on cloud platforms
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
 
 // swagger doc JSON configuration
 const swaggerSpec = {
@@ -121,21 +132,17 @@ const swaggerSpec = {
 // 1. API routes FIRST — before swagger middleware
 app.post('/api/redact', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'No file uploaded. Please upload a .docx file.' });
     }
 
-    const buf = fs.readFileSync(req.file.path);
-    const { outBuf } = await redactBuffer(buf);
-
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    const { outBuf } = await redactBuffer(req.file.buffer);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', 'attachment; filename="Redacted_Output.docx"');
     res.end(outBuf, 'binary');
   } catch (err) {
     console.error('[redact] Error:', err.message);
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: err.message });
   }
 });
@@ -143,14 +150,11 @@ app.post('/api/redact', upload.single('file'), async (req, res) => {
 // verbose inspection endpoint — same redactBuffer, returns JSON mappings
 app.post('/api/inspect', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'No file uploaded. Please upload a .docx file.' });
     }
 
-    const buf = fs.readFileSync(req.file.path);
-    const { stats, mappings } = await redactBuffer(buf);
-
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    const { stats, mappings } = await redactBuffer(req.file.buffer);
 
     res.json({
       fileName: req.file.originalname,
@@ -159,7 +163,6 @@ app.post('/api/inspect', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     console.error('[inspect] Error:', err.message);
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: err.message });
   }
 });
