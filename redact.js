@@ -36,29 +36,38 @@ const decXml = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;
 const encXml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const esc = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// text me se pii replace karne ka main function (CLI ke liye)
-function proc(txt) {
+// text me se pii replace karne ka main function
+function proc(txt, pM, cM, eM, phM, aM, cinM, regM, panM) {
   if (!txt || !txt.trim()) return txt;
 
-  txt = txt.replace(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/gi, m => eMap.get(m.toLowerCase()));
-  txt = txt.replace(/\b0\d{2,4}[-\s]\d{6,8}\b/g, m => phMap.get(m.trim()));
+  const _pMap = pM || pMap;
+  const _cMap = cM || cMap;
+  const _eMap = eM || eMap;
+  const _phMap = phM || phMap;
+  const _aMap = aM || aMap;
+  const _cinMap = cinM || cinMap;
+  const _regMap = regM || regMap;
+  const _panMap = panM || panMap;
+
+  txt = txt.replace(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/gi, m => _eMap.get(m.toLowerCase()));
+  txt = txt.replace(/\b0\d{2,4}[-\s]\d{6,8}\b/g, m => _phMap.get(m.trim()));
   txt = txt.replace(/(?<!\d)(?:\+\s?91|91(?!\d)|0(?=\d{10}(?!\d)))[\s\-.]?(?:\d[\s\-.]?){9,10}(?!\d)/g, m => {
     const d = m.replace(/\D/g, '');
-    return d.length >= 10 ? phMap.get(m.trim()) : m;
+    return d.length >= 10 ? _phMap.get(m.trim()) : m;
   });
-  txt = txt.replace(/\b[UL]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}\b/g, m => cinMap.get(m));
-  txt = txt.replace(/\bIN[A-Z]\d{9}\b|\bIN[A-Z]{2}\d{9}\b/g, m => regMap.get(m));
-  txt = txt.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, m => panMap.get(m));
+  txt = txt.replace(/\b[UL]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}\b/g, m => _cinMap.get(m));
+  txt = txt.replace(/\bIN[A-Z]\d{9}\b|\bIN[A-Z]{2}\d{9}\b/g, m => _regMap.get(m));
+  txt = txt.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, m => _panMap.get(m));
   txt = txt.replace(/(?:date\s+of\s+birth|dob|born\s+on)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/gi, (full, dt) => full.replace(dt, '01/01/1995'));
   txt = txt.replace(/(?:FATHER['’]S\s+NAME|MOTHER['’]S\s+NAME|GUARDIAN['’]S\s+NAME|CANDIDATE['’]S\s+NAME|FULL\s+NAME)\s*[:=]\s*([A-Z\s]{3,40})/gi, (full, nameVal) => {
     const cleanN = nameVal.trim();
-    return cleanN.length >= 3 ? full.replace(cleanN, pMap.get(cleanN)) : full;
+    return cleanN.length >= 3 ? full.replace(cleanN, _pMap.get(cleanN)) : full;
   });
-  txt = txt.replace(/(?:Gat\s+No\.|Plot\s+No\.|Floor|Marg|Street|Road|Complex|Village|Bhavan|Towers|Plaza)[\s\S]{1,120}?\b\d{6}\b/gi, m => aMap.get(m.trim()));
+  txt = txt.replace(/(?:Gat\s+No\.|Plot\s+No\.|Floor|Marg|Street|Road|Complex|Village|Bhavan|Towers|Plaza)[\s\S]{1,120}?\b\d{6}\b/gi, m => _aMap.get(m.trim()));
 
   for (const a of A_LIST) {
     if (txt.includes(a)) {
-      txt = txt.split(a).join(aMap.get(a));
+      txt = txt.split(a).join(_aMap.get(a));
     }
   }
 
@@ -66,7 +75,7 @@ function proc(txt) {
     const pat = new RegExp(esc(name), 'gi');
     if (pat.test(txt)) {
       pat.lastIndex = 0;
-      txt = txt.replace(pat, pMap.get(name));
+      txt = txt.replace(pat, _pMap.get(name));
     }
   }
 
@@ -74,14 +83,14 @@ function proc(txt) {
     const pat = new RegExp(esc(cmp), 'gi');
     if (pat.test(txt)) {
       pat.lastIndex = 0;
-      txt = txt.replace(pat, cMap.get(cmp));
+      txt = txt.replace(pat, _cMap.get(cmp));
     }
   }
 
   return txt;
 }
 
-// ultra-fast memory-efficient docx buffer redaction (uses <68MB RAM, zero DOM OOM crashes on Render)
+// ultra-fast memory-efficient docx buffer redaction (catches table cell & paragraph split names)
 async function redactBuffer(rawBuf) {
   const _pMap = new MapCls(() => faker.person.fullName());
   const _cMap = new MapCls(() => `${faker.company.name()} Limited`);
@@ -92,49 +101,6 @@ async function redactBuffer(rawBuf) {
   const _regMap = new MapCls(() => `INM${faker.number.int({min:100000000,max:999999999})}`);
   const _panMap = new MapCls(() => `${faker.string.alpha({length:5,casing:'upper'})}${faker.number.int({min:1000,max:9999})}${faker.string.alpha({length:1,casing:'upper'})}`);
 
-  function procReq(txt) {
-    if (!txt || !txt.trim()) return txt;
-    txt = txt.replace(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/gi, m => _eMap.get(m.toLowerCase()));
-    txt = txt.replace(/\b0\d{2,4}[-\s]\d{6,8}\b/g, m => _phMap.get(m.trim()));
-    txt = txt.replace(/(?<!\d)(?:\+\s?91|91(?!\d)|0(?=\d{10}(?!\d)))[\s\-.]?(?:\d[\s\-.]?){9,10}(?!\d)/g, m => {
-      const d = m.replace(/\D/g, '');
-      return d.length >= 10 ? _phMap.get(m.trim()) : m;
-    });
-    txt = txt.replace(/\b[UL]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}\b/g, m => _cinMap.get(m));
-    txt = txt.replace(/\bIN[A-Z]\d{9}\b|\bIN[A-Z]{2}\d{9}\b/g, m => _regMap.get(m));
-    txt = txt.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, m => _panMap.get(m));
-    txt = txt.replace(/(?:date\s+of\s+birth|dob|born\s+on)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/gi, (full, dt) => full.replace(dt, '01/01/1995'));
-    txt = txt.replace(/(?:FATHER['’]S\s+NAME|MOTHER['’]S\s+NAME|GUARDIAN['’]S\s+NAME|CANDIDATE['’]S\s+NAME|FULL\s+NAME)\s*[:=]\s*([A-Z\s]{3,40})/gi, (full, nv) => {
-      const c = nv.trim();
-      return c.length >= 3 ? full.replace(c, _pMap.get(c)) : full;
-    });
-    txt = txt.replace(/(?:Gat\s+No\.|Plot\s+No\.|Floor|Marg|Street|Road|Complex|Village|Bhavan|Towers|Plaza)[\s\S]{1,120}?\b\d{6}\b/gi, m => _aMap.get(m.trim()));
-
-    for (const a of A_LIST) {
-      if (txt.includes(a)) {
-        txt = txt.split(a).join(_aMap.get(a));
-      }
-    }
-
-    for (const name of P_LIST) {
-      const pat = new RegExp(esc(name), 'gi');
-      if (pat.test(txt)) {
-        pat.lastIndex = 0;
-        txt = txt.replace(pat, _pMap.get(name));
-      }
-    }
-
-    for (const cmp of C_LIST) {
-      const pat = new RegExp(esc(cmp), 'gi');
-      if (pat.test(txt)) {
-        pat.lastIndex = 0;
-        txt = txt.replace(pat, _cMap.get(cmp));
-      }
-    }
-
-    return txt;
-  }
-
   const zip = await JSZip.loadAsync(rawBuf);
   const targetFiles = Object.keys(zip.files).filter(name =>
     /^word\/(document|header\d*|footer\d*)\.xml$/.test(name)
@@ -142,12 +108,29 @@ async function redactBuffer(rawBuf) {
 
   for (const f of targetFiles) {
     let xmlStr = await zip.file(f).async('string');
-    xmlStr = xmlStr.replace(/(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/gi, (match, openTag, textContent, closeTag) => {
-      const decoded = decXml(textContent);
-      const red = procReq(decoded);
-      if (red === decoded) return match;
-      return openTag + encXml(red) + closeTag;
+
+    // Paragraph-level matching — joins all <w:t> nodes in table cells & body paragraphs to redact split names
+    xmlStr = xmlStr.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/gi, pMatch => {
+      let paraText = '';
+      pMatch.replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi, (_, c) => {
+        paraText += decXml(c);
+        return _;
+      });
+
+      if (!paraText.trim()) return pMatch;
+
+      const norm = paraText.replace(/[\t\r\n]+/g, ' ');
+      const red = proc(norm, _pMap, _cMap, _eMap, _phMap, _aMap, _cinMap, _regMap, _panMap);
+
+      if (red.toLowerCase() !== norm.toLowerCase()) {
+        const pPrM = pMatch.match(/<w:pPr\b[^>]*>[\s\S]*?<\/w:pPr>/i);
+        const pPrXml = pPrM ? pPrM[0] : '';
+        return `<w:p>${pPrXml}<w:r><w:t xml:space="preserve">${encXml(red)}</w:t></w:r></w:p>`;
+      }
+
+      return pMatch;
     });
+
     zip.file(f, xmlStr);
   }
 
