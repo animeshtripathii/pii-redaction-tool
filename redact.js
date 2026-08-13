@@ -26,6 +26,7 @@ class MapCls {
   }
 }
 
+// module-level maps for CLI usage
 const pMap = new MapCls(() => faker.person.fullName());
 const cMap = new MapCls(() => `${faker.company.name()} Limited`);
 const eMap = new MapCls(() => faker.internet.email().toLowerCase());
@@ -50,11 +51,11 @@ const R_CC = /\b(?:\d{4}[\s\-]){3}\d{4}\b/g;
 const R_DOB = /(?:date\s+of\s+birth|dob|born\s+on)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/gi;
 
 const R_ADR = /(?:Gat\s+No\.|Plot\s+No\.|Floor|Marg|Street|Road|Complex|Village|Bhavan|Towers|Plaza)[\s\S]{1,120}?\b\d{6}\b/gi;
-const R_LBL = /(?:FATHER['’]S\s+NAME|MOTHER['’]S\s+NAME|GUARDIAN['’]S\s+NAME|CANDIDATE['’]S\s+NAME|FULL\s+NAME)\s*[:=]\s*([A-Z\s]{3,40})/gi;
+const R_LBL = /(?:FATHER['']S\s+NAME|MOTHER['']S\s+NAME|GUARDIAN['']S\s+NAME|CANDIDATE['']S\s+NAME|FULL\s+NAME)\s*[:=]\s*([A-Z\s]{3,40})/gi;
 
 const esc = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// text me se pii replace karne ka main function
+// text me se pii replace karne ka main function (CLI ke liye module-level maps use karta hai)
 function proc(txt) {
   if (!txt || !txt.trim()) return txt;
 
@@ -173,20 +174,83 @@ function fixP(p, newT) {
 }
 
 // saare paragraphs par redaction apply karta hai
-const runDoc = doc => {
+const runDoc = (doc, procFn) => {
+  const fn = procFn || proc;
   const pList = Array.from(doc.getElementsByTagNameNS(WNS, 'p'));
   for (const p of pList) {
     const raw = getTxt(p);
     if (!raw.trim()) continue;
 
     const norm = raw.replace(/[\t\r\n]+/g, ' ').trim();
-    const red = proc(norm);
+    const red = fn(norm);
 
     if (red.toLowerCase() !== norm.toLowerCase()) {
       fixP(p, red);
     }
   }
 };
+
+// server.js ke liye export — fresh maps per request, same proven DOM approach as CLI
+async function redactBuffer(rawBuf) {
+  const _pMap = new MapCls(() => faker.person.fullName());
+  const _cMap = new MapCls(() => `${faker.company.name()} Limited`);
+  const _eMap = new MapCls(() => faker.internet.email().toLowerCase());
+  const _phMap = new MapCls(() => `+91 ${faker.number.int({min:70000,max:99999})} ${faker.number.int({min:10000,max:99999})}`);
+  const _aMap = new MapCls(() => `${faker.location.streetAddress()}, ${faker.location.city()} - ${faker.number.int({min:400000,max:499999})}`);
+  const _cinMap = new MapCls(() => `U${faker.number.int({min:10000,max:99999})}MH2020PLC${faker.number.int({min:100000,max:999999})}`);
+  const _regMap = new MapCls(() => `INM${faker.number.int({min:100000000,max:999999999})}`);
+  const _panMap = new MapCls(() => `${faker.string.alpha({length:5,casing:'upper'})}${faker.number.int({min:1000,max:9999})}${faker.string.alpha({length:1,casing:'upper'})}`);
+
+  // fresh proc per request — no shared global regex state
+  function procReq(txt) {
+    if (!txt || !txt.trim()) return txt;
+    // fresh regex objects har call me — no lastIndex issues
+    txt = txt.replace(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/gi, m => _eMap.get(m.toLowerCase()));
+    txt = txt.replace(/\b0\d{2,4}[-\s]\d{6,8}\b/g, m => _phMap.get(m.trim()));
+    txt = txt.replace(/(?<!\d)(?:\+\s?91|91(?!\d)|0(?=\d{10}(?!\d)))[\s\-.]?(?:\d[\s\-.]?){9,10}(?!\d)/g, m => { const d = m.replace(/\D/g,''); return d.length>=10 ? _phMap.get(m.trim()) : m; });
+    txt = txt.replace(/\b[UL]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}\b/g, m => _cinMap.get(m));
+    txt = txt.replace(/\bIN[A-Z]\d{9}\b|\bIN[A-Z]{2}\d{9}\b/g, m => _regMap.get(m));
+    txt = txt.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, m => _panMap.get(m));
+    txt = txt.replace(/(?:date\s+of\s+birth|dob|born\s+on)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/gi, (full, dt) => full.replace(dt, '01/01/1995'));
+    txt = txt.replace(/(?:FATHER[''']S\s+NAME|MOTHER[''']S\s+NAME|GUARDIAN[''']S\s+NAME|CANDIDATE[''']S\s+NAME|FULL\s+NAME)\s*[:=]\s*([A-Z\s]{3,40})/gi, (full, nv) => { const c = nv.trim(); return c.length>=3 ? full.replace(c, _pMap.get(c)) : full; });
+    txt = txt.replace(/(?:Gat\s+No\.|Plot\s+No\.|Floor|Marg|Street|Road|Complex|Village|Bhavan|Towers|Plaza)[\s\S]{1,120}?\b\d{6}\b/gi, m => _aMap.get(m.trim()));
+    for (const a of A_LIST) { if (txt.includes(a)) txt = txt.split(a).join(_aMap.get(a)); }
+    for (const name of P_LIST) { const pat = new RegExp(esc(name), 'gi'); if (pat.test(txt)) { pat.lastIndex=0; txt = txt.replace(pat, _pMap.get(name)); } }
+    for (const cmp of C_LIST) { const pat = new RegExp(esc(cmp), 'gi'); if (pat.test(txt)) { pat.lastIndex=0; txt = txt.replace(pat, _cMap.get(cmp)); } }
+    return txt;
+  }
+
+  const zip = await JSZip.loadAsync(rawBuf);
+  const targetFiles = Object.keys(zip.files).filter(name =>
+    /^word\/(document|header\d*|footer\d*)\.xml$/.test(name)
+  );
+
+  for (const f of targetFiles) {
+    const xmlStr = await zip.file(f).async('string');
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+    runDoc(xmlDoc, procReq);
+    const serializer = new XMLSerializer();
+    zip.file(f, serializer.serializeToString(xmlDoc));
+  }
+
+  const outBuf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  const toObj = m => Object.fromEntries(m.map);
+
+  return {
+    outBuf,
+    stats: { p: _pMap.map.size, c: _cMap.map.size, e: _eMap.map.size, ph: _phMap.map.size, a: _aMap.map.size, cin: _cinMap.map.size, reg: _regMap.map.size },
+    mappings: {
+      personNames: toObj(_pMap),
+      companyNames: toObj(_cMap),
+      emails: toObj(_eMap),
+      phones: toObj(_phMap),
+      addresses: toObj(_aMap),
+      cins: toObj(_cinMap),
+      regs: toObj(_regMap)
+    }
+  };
+}
 
 // zip open karke sub xml files modify karta hai
 async function main() {
@@ -257,7 +321,11 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('Error:', err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('Error:', err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { redactBuffer };
