@@ -1,0 +1,20 @@
+{
+  "name": "pii-redactor",
+  "version": "1.0.0",
+  "description": "PII Redaction Tool for DOCX files - KSH International Red Herring Prospectus",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --max-old-space-size=450 server.js",
+    "redact": "node redact.js \"Red Herring Prospectus.docx\" \"Red Herring Prospectus - REDACTED.docx\"",
+    "redact:verbose": "node redact.js \"Red Herring Prospectus.docx\" \"Red Herring Prospectus - REDACTED.docx\" --verbose",
+    "evaluate": "node evaluate.js \"Red Herring Prospectus.docx\" \"Red Herring Prospectus - REDACTED.docx\""
+  },
+  "dependencies": {
+    "@faker-js/faker": "^10.5.0",
+    "@xmldom/xmldom": "^0.9.8",
+    "express": "^4.19.2",
+    "jszip": "^3.10.1",
+    "multer": "^1.4.5-lts.1",
+    "swagger-ui-express": "^5.0.1"
+  }
+}
