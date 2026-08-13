@@ -13,6 +13,7 @@ class MapCls {
     this.map = new Map();
   }
 
+  // map me se value fetch ya fake value generate karne ka method
   get(val) {
     const k = val.trim();
     if (!this.map.has(k)) {
@@ -32,11 +33,16 @@ const cinMap = new MapCls(() => `U${faker.number.int({min:10000,max:99999})}MH20
 const regMap = new MapCls(() => `INM${faker.number.int({min:100000000,max:999999999})}`);
 const panMap = new MapCls(() => `${faker.string.alpha({length:5,casing:'upper'})}${faker.number.int({min:1000,max:9999})}${faker.string.alpha({length:1,casing:'upper'})}`);
 
+// xml special entities decode karne ka helper function
 const decXml = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+
+// xml special entities encode karne ka helper function
 const encXml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// regex special characters escape karne ka helper function
 const esc = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// text me se pii replace karne ka main function
+// text me se pii replace karne ka main logic function
 function proc(txt, pM, cM, eM, phM, aM, cinM, regM, panM) {
   if (!txt || !txt.trim()) return txt;
 
@@ -90,7 +96,7 @@ function proc(txt, pM, cM, eM, phM, aM, cinM, regM, panM) {
   return txt;
 }
 
-// ultra-fast memory-efficient docx buffer redaction (catches table cell & paragraph split names)
+// docx buffer me se saare pii data redact karne ka main async function
 async function redactBuffer(rawBuf) {
   const _pMap = new MapCls(() => faker.person.fullName());
   const _cMap = new MapCls(() => `${faker.company.name()} Limited`);
@@ -109,7 +115,7 @@ async function redactBuffer(rawBuf) {
   for (const f of targetFiles) {
     let xmlStr = await zip.file(f).async('string');
 
-    // Paragraph-level matching — joins all <w:t> nodes in table cells & body paragraphs to redact split names
+    // paragraph-level matching — joins all <w:t> nodes in table cells & body paragraphs to redact split names
     xmlStr = xmlStr.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/gi, pMatch => {
       let paraText = '';
       pMatch.replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi, (_, c) => {
@@ -152,7 +158,7 @@ async function redactBuffer(rawBuf) {
   };
 }
 
-// zip open karke sub xml files modify karta hai (CLI)
+// cli execution aur output file save karne ka main function
 async function main() {
   const args = process.argv.slice(2);
   const v = args.includes('--verbose');

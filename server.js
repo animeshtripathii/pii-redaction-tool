@@ -11,11 +11,11 @@ const { calcMetrics } = require('./evaluate');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// use in-memory storage for uploaded files (zero disk I/O, works everywhere: Render, Vercel, AWS)
+// in-memory storage configuration for uploaded files
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// enable CORS for cross-origin Swagger UI requests on cloud platforms
+// enable CORS middleware for cross-origin Swagger UI requests
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -129,7 +129,7 @@ const swaggerSpec = {
   },
 };
 
-// 1. API routes FIRST — before swagger middleware
+// docx upload handle karke redacted docx output file download return karne ka api endpoint
 app.post('/api/redact', upload.single('file'), async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
@@ -147,7 +147,7 @@ app.post('/api/redact', upload.single('file'), async (req, res) => {
   }
 });
 
-// verbose inspection endpoint — same redactBuffer, returns JSON mappings
+// docx upload handle karke detected pii mappings json return karne ka api endpoint
 app.post('/api/inspect', upload.single('file'), async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
@@ -167,7 +167,7 @@ app.post('/api/inspect', upload.single('file'), async (req, res) => {
   }
 });
 
-// dynamic evaluation endpoint — runs calcMetrics on real DOCX files
+// benchmark accuracy aur precision metrics json return karne ka api endpoint
 app.get('/api/evaluate', async (req, res) => {
   try {
     const srcPath = path.join(__dirname, 'Red Herring Prospectus.docx');
@@ -185,11 +185,13 @@ app.get('/api/evaluate', async (req, res) => {
   }
 });
 
-// 2. Swagger UI routes AFTER API endpoints
+// swagger ui docs render karne ka route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// root path ko swagger ui docs par redirect karne ka handler
 app.get('/', (req, res) => res.redirect('/api-docs'));
 
-// app server start karta hai
+// app server start karne ka listener
 app.listen(port, () => {
   console.log(`[+] Server running at http://localhost:${port}`);
   console.log(`[+] Swagger UI docs available at http://localhost:${port}/api-docs`);

@@ -115,7 +115,7 @@ const DISTRACTORS = [
   'Fiscal 2024', 'Fiscal 2025', 'Rs. 100', '10.5%', '100%', '500000',
 ];
 
-// ultra-fast low-memory text extraction from docx buffer
+// docx zip buffer me se clean plain text extract karne ka helper function
 async function extractText(docBuf) {
   const zip = await JSZip.loadAsync(docBuf);
   let fullText = '';
@@ -135,7 +135,7 @@ async function extractText(docBuf) {
   return fullText.replace(/[\t\r\n]+/g, ' ').replace(/\s+/g, ' ');
 }
 
-// calculation metrics logic (uses <5MB RAM)
+// ground truth vs redacted docx precision recall compute karne ka main function
 async function calcMetrics(srcPath, redPath) {
   const srcBuf = fs.readFileSync(srcPath);
   const redBuf = fs.readFileSync(redPath);
@@ -197,6 +197,7 @@ async function calcMetrics(srcPath, redPath) {
   };
 }
 
+// evaluation benchmark cli output render karne ka main function
 async function main() {
   const args = process.argv.slice(2);
   const srcFile = args[0] || 'Red Herring Prospectus.docx';
