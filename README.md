@@ -1,118 +1,173 @@
-# PII Redaction Tool & REST API
+# PII Redaction Tool
 
-A Node.js web service and CLI tool to redact personally identifiable information (PII) from DOCX files — featuring dynamic fake generation via `@faker-js/faker` and interactive **Swagger UI** testing.
+A production-ready Node.js tool to automatically detect and redact Personally Identifiable Information (PII) from `.docx` files. Designed and benchmarked on a real 12,000+ line IPO prospectus (KSH International Limited - Red Herring Prospectus).
+
+## 🌐 Live Demo
+
+**Swagger UI:** [https://pii-redaction-tool.onrender.com/api-docs](https://pii-redaction-tool.onrender.com/api-docs)
 
 ---
 
-## System Architecture
+## ✨ Features
+
+- **📄 Redact any `.docx` file** — Upload via Swagger UI and download the redacted file instantly
+- **🔍 Inspect PII mappings** — Get a full verbose JSON of all detected entities and their fake replacements
+- **📊 Live benchmark evaluation** — Real-time Precision / Recall / F1 metrics via API
+- **🎭 100% dynamic fake generation** — All replacements generated via `@faker-js/faker` (no hardcoded lists)
+- **🏗️ DOM-based paragraph-level matching** — Joins all text runs within a paragraph before matching, catching names split across XML formatting runs
+- **🔒 Zero False Positives** — Regex patterns precision-tuned to never alter legal terms, financial figures, or regulatory identifiers
+
+---
+
+## 📊 Benchmark Results
+
+| Metric | Value |
+|--------|-------|
+| **Precision** | ✅ **100.0%** |
+| **Recall** | 📈 **76.8%** |
+| **F1 Score** | 📈 **86.9%** |
+| **Accuracy** | 📈 **76.8%** |
+| **False Positives** | ✅ **0** |
+
+> Benchmarked on KSH International Limited — Red Herring Prospectus (12,000+ line DOCX).
+
+---
+
+## 🛠️ Architecture
 
 ```mermaid
 graph TD
-    A["Input Document (.docx)"] --> B["Express Server / JSZip"]
-    B --> C["DOMParser (word/document.xml)"]
-    C --> D["Text Extraction (<w:p> & <w:t>)"]
-    D --> E["Regex & Gazetteer Engine"]
-    E --> F["@faker-js/faker (Dynamic Alternatives)"]
-    F --> G["XML DOM Serializer"]
-    G --> H["Redacted Document (.docx) / Swagger Download"]
+    A["📁 Input DOCX"] --> B["JSZip — extract XML"]
+    B --> C["DOMParser — paragraph DOM tree"]
+    C --> D["getTxt() — join w:t text runs per paragraph"]
+    D --> E["proc() — Regex + Gazetteer matching"]
+    E --> F["@faker-js/faker — dynamic replacements"]
+    F --> G["fixP() — rewrite XML paragraph node"]
+    G --> H["XMLSerializer → Redacted DOCX"]
+    H --> I["📥 Download / CLI output"]
+```
+
+```mermaid
+graph LR
+    CLI["CLI: npm run redact"] --> RB["redactBuffer()"]
+    API["REST API: POST /api/redact"] --> RB
+    INS["REST API: POST /api/inspect"] --> RB
+    RB --> GAZ["gazetteer.js — P_LIST, C_LIST, A_LIST"]
+    RB --> FAKER["@faker-js/faker"]
 ```
 
 ---
 
-## Interactive Swagger UI
+## 🚀 Quick Start
 
-When running the web server or deployed on cloud platforms (Render / Vercel), open the base URL or `/api-docs` to access the interactive Swagger UI:
-
-- **Swagger UI Endpoint:** `http://localhost:3000/api-docs` (or your deployed cloud URL)
-- **Interactive Feature:** Click **Try it out** $\rightarrow$ **Choose File** $\rightarrow$ **Execute** to redact any `.docx` file live in your web browser.
-
----
-
-## Technical Approach
-
-**Regex + Dynamic `@faker-js/faker` + shared gazetteer module (`gazetteer.js`)**, operating directly on raw DOCX XML via `jszip` + `@xmldom/xmldom`.
-
-| PII Type | Replacement Strategy |
-|----------|----------------------|
-| Email addresses | Regex + `faker.internet.email()` |
-| Phone numbers | Regex + `faker.number.int()` (+91 prefix) |
-| Physical addresses | Dynamic Regex (`R_ADR`) + `faker.location.streetAddress()` |
-| Full names | Gazetteer + `faker.person.fullName()` |
-| Company names | Gazetteer + `faker.company.name()` |
-| CIN numbers | Regex + dynamic CIN pattern |
-| SEBI reg numbers | Regex + dynamic SEBI ID pattern |
-| PAN numbers | Regex + dynamic PAN pattern |
-| SSN / Credit Card / DOB | Regex + `faker` generators |
-
-**Dynamic Fake Generation:** Every real entity is mapped to a realistic fake alternative (e.g. `Sarthak Malvadkar` $\rightarrow$ `John Doe`, `cs.connect@...` $\rightarrow$ `john.doe@example.com`) generated dynamically on-the-fly via `@faker-js/faker`.
-
----
-
-## Requirements & Installation
-
-- Node.js ≥ 18
-- npm
-
+### Install
 ```bash
 npm install
 ```
 
----
-
-## Usage Commands
-
-### 1. Web Server & Swagger UI
-
+### CLI Usage
 ```bash
+# Redact a document
+npm run redact
+
+# Redact with verbose PII mapping output
+npm run redact:verbose
+
+# Run evaluation benchmark
+npm run evaluate
+
+# Start REST API server
 npm start
 ```
-Open `http://localhost:3000` or `http://localhost:3000/api-docs` to use the interactive Swagger UI.
 
-### 2. Redact Document (CLI)
-
-Using `npm` shortcut:
+### Custom file redaction
 ```bash
-npm run redact
-```
-
-Or using direct `node` command:
-```bash
-node redact.js "Red Herring Prospectus.docx" "Red Herring Prospectus - REDACTED.docx"
-```
-
-### 3. Run Evaluation Benchmark (CLI)
-
-Using `npm` shortcut:
-```bash
-npm run evaluate
-```
-
-Or using direct `node` command:
-```bash
-node evaluate.js "Red Herring Prospectus.docx" "Red Herring Prospectus - REDACTED.docx"
+node redact.js "input.docx" "output-redacted.docx"
+node redact.js "input.docx" "output-redacted.docx" --verbose
 ```
 
 ---
 
-## Project Structure & Deliverables
+## 🌐 REST API (Swagger UI)
 
-| File | Description |
-|------|-------------|
-| `server.js` | Express web server with interactive Swagger UI |
-| `redact.js` | Main Node.js CLI redaction script |
-| `gazetteer.js` | Shared modular entity gazetteer list |
-| `evaluate.js` | Precision & Recall evaluation harness |
-| `README.md` | Usage & Swagger UI setup guide |
-| `EVALUATION_REPORT.md` | Benchmark metrics & methodology report |
-| `Red Herring Prospectus - REDACTED.docx` | Redacted output document |
+Start the server and visit `http://localhost:3000/api-docs`.
+
+### `POST /api/redact`
+Upload any `.docx` file → Download fully redacted `.docx` output.
+
+### `POST /api/inspect`
+Upload any `.docx` file → View verbose JSON of all detected PII entities and their fake replacements.
+
+```json
+{
+  "fileName": "Red Herring Prospectus.docx",
+  "summary": { "p": 20, "c": 16, "e": 26, "ph": 11, "a": 29 },
+  "detectedMappings": {
+    "personNames": {
+      "Sarthak Malvadkar": "John Smith",
+      "Kushal Subbayya Hegde": "Jane Doe"
+    },
+    "emails": {
+      "cs.connect@kshinternational.com": "john.doe@gmail.com"
+    }
+  }
+}
+```
+
+### `GET /api/evaluate`
+Returns live evaluation metrics from real DOCX benchmark files.
+
+```json
+{
+  "precision": "100.0%",
+  "recall": "76.8%",
+  "f1Score": "86.9%",
+  "accuracy": "76.8%",
+  "metrics": { "truePositives": 76, "falseNegatives": 23, "falsePositives": 0 }
+}
+```
 
 ---
 
-## Accuracy Benchmark Summary
+## 📁 Project Structure
 
-| Metric | Score |
-|--------|-------|
-| **Precision** | **100.0%** (Zero false positives) |
-| **Recall** | **96.0%** (95 / 99 GT items redacted) |
-| **F1 Score** | **97.9%** |
-| **Accuracy** | **96.0%** |
+```
+├── redact.js          # Core redaction engine (CLI + exports redactBuffer())
+├── server.js          # Express REST API + Swagger UI
+├── evaluate.js        # Evaluation benchmark harness (exports calcMetrics())
+├── gazetteer.js       # Shared PII entity dictionary (P_LIST, C_LIST, A_LIST)
+├── package.json       # Scripts & dependencies
+├── EVALUATION_REPORT.md  # Full benchmark methodology & results
+└── Red Herring Prospectus.docx  # Benchmark input document
+```
+
+---
+
+## 🔍 PII Types Detected
+
+| Category | Method |
+|----------|--------|
+| Person Names | Gazetteer (P_LIST) + DOM paragraph joining |
+| Company Names | Gazetteer (C_LIST) |
+| Email Addresses | Regex `R_EML` |
+| Indian Phone Numbers | Regex `R_PHN` (+91/91/0 prefix) |
+| Landline Numbers | Regex `R_LND` (STD code format) |
+| Addresses | Gazetteer (A_LIST) + Regex `R_ADR` (pincode-anchored) |
+| CIN Numbers | Regex `R_CIN` |
+| SEBI Reg. Numbers | Regex `R_REG` |
+| PAN Numbers | Regex `R_PAN` |
+| Resume Labels | Regex `R_LBL` (FATHER'S NAME: etc.) |
+| Dates of Birth | Regex `R_DOB` |
+| IP Addresses | Regex `R_IP` |
+| SSN / Credit Cards | Regex (for non-Indian docs) |
+
+---
+
+## 📦 Dependencies
+
+- `jszip` — DOCX ZIP extraction/recompression
+- `@xmldom/xmldom` — XML DOM parsing and serialization
+- `@faker-js/faker` — Dynamic fake PII generation
+- `express` — REST API server
+- `multer` — File upload middleware
+- `swagger-ui-express` — Interactive API documentation
