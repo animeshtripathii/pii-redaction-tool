@@ -109,7 +109,7 @@ function proc(txt, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap) {
   return txt;
 }
 
-// paragraph-level fast memory-efficient docx buffer redaction
+// 2-pass memory-efficient docx buffer redaction
 async function redactBuf(rawBuf) {
   const pMap = new MapCls(() => faker.person.fullName());
   const cMap = new MapCls(() => `${faker.company.name()} Limited`);
@@ -128,27 +128,13 @@ async function redactBuf(rawBuf) {
   for (const f of targetFiles) {
     let xmlStr = await zip.file(f).async('string');
 
-    xmlStr = xmlStr.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/gi, pMatch => {
-      let paraText = '';
-      pMatch.replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi, (tMatch, content) => {
-        paraText += content + ' ';
-        return tMatch;
-      });
-
-      if (!paraText.trim()) return pMatch;
-
-      const norm = paraText.replace(/[\t\r\n]+/g, ' ').trim();
-      const red = proc(norm, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap);
-
-      if (red.toLowerCase() !== norm.toLowerCase()) {
-        const pPrMatch = pMatch.match(/<w:pPr\b[^>]*>[\s\S]*?<\/w:pPr>/i);
-        const pPrXml = pPrMatch ? pPrMatch[0] : '';
-
-        const safeRed = red.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        return `<w:p>${pPrXml}<w:r><w:t xml:space="preserve">${safeRed}</w:t></w:r></w:p>`;
-      }
-
-      return pMatch;
+    // Pass 1: w:t tag level — directly replace entities that exist in single w:t tags (emails, phones, CIN, names)
+    xmlStr = xmlStr.replace(/<w:t(\b[^>]*)>([\s\S]*?)<\/w:t>/gi, (match, attrs, content) => {
+      if (!content.trim()) return match;
+      const red = proc(content, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap);
+      if (red === content) return match;
+      const safe = red.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<w:t${attrs}>${safe}</w:t>`;
     });
 
     zip.file(f, xmlStr);
