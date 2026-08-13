@@ -47,6 +47,11 @@ const R_LBL = /(?:FATHER['’]S\s+NAME|MOTHER['’]S\s+NAME|GUARDIAN['’]S\s+NA
 
 const esc = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// xml entity decode karta hai taaki proc() names aur companies sahi match kare
+const decXml = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+// xml entity encode karta hai output ko safe banane ke liye
+const encXml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 // text redaction logic
 function proc(txt, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap) {
   if (!txt || !txt.trim()) return txt;
@@ -128,13 +133,13 @@ async function redactBuf(rawBuf) {
   for (const f of targetFiles) {
     let xmlStr = await zip.file(f).async('string');
 
-    // Pass 1: w:t tag level — directly replace entities that exist in single w:t tags (emails, phones, CIN, names)
-    xmlStr = xmlStr.replace(/<w:t(\b[^>]*)>([\s\S]*?)<\/w:t>/gi, (match, attrs, content) => {
-      if (!content.trim()) return match;
-      const red = proc(content, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap);
-      if (red === content) return match;
-      const safe = red.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<w:t${attrs}>${safe}</w:t>`;
+    // Pass 1: w:t tag level — decode xml entities, proc() se replace karo, phir re-encode karo
+    xmlStr = xmlStr.replace(/<w:t(\b[^>]*)>([\s\S]*?)<\/w:t>/gi, (match, attrs, rawContent) => {
+      if (!rawContent.trim()) return match;
+      const decoded = decXml(rawContent);     // &amp; -> & etc taaki names match ho
+      const red = proc(decoded, pMap, cMap, eMap, phMap, aMap, cinMap, regMap, panMap);
+      if (red === decoded) return match;      // koi change nahi hua to original return karo
+      return `<w:t${attrs}>${encXml(red)}</w:t>`;
     });
 
     zip.file(f, xmlStr);
