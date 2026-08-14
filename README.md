@@ -4,7 +4,7 @@ A production-ready Node.js tool to automatically detect and redact Personally Id
 
 ## 🌐 Live Demo
 
-**Swagger UI:** [https://pii-redaction-tool.onrender.com/api-docs](https://pii-redaction-tool.onrender.com/api-docs)
+**Swagger UI:** [https://pii-redaction-tool.onrender.com/api-docs](https://pii-redaction-tool-1-7zh8.onrender.com/api-docs/)
 
 ---
 
